@@ -1,3 +1,36 @@
+const charSets = {
+  uppercase: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+  lowercase: "abcdefghijklmnopqrstuvwxyz",
+  numbers: "0123456789",
+  symbols: "!@#$%^&*()_+~`|}{[]:;?><,./-=",
+};
+
+/**
+ * Uniform random integer in [0, max) backed by the Web Crypto API.
+ * Values past the largest multiple of `max` are rejected so that every
+ * result is equally likely (a plain `% max` would bias low indices).
+ */
+const randomInt = (max: number): number => {
+  const limit = Math.floor(0x100000000 / max) * max;
+  const buffer = new Uint32Array(1);
+  let value: number;
+  do {
+    crypto.getRandomValues(buffer);
+    value = buffer[0];
+  } while (value >= limit);
+  return value % max;
+};
+
+const pickChar = (chars: string) => chars[randomInt(chars.length)];
+
+const shuffle = <T>(items: T[]): T[] => {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+  return items;
+};
+
 export const generatePassword = (
   length: number,
   options: {
@@ -7,57 +40,29 @@ export const generatePassword = (
     symbols: boolean;
   },
 ) => {
-  const charSets = {
-    uppercase: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-    lowercase: "abcdefghijklmnopqrstuvwxyz",
-    numbers: "0123456789",
-    symbols: "!@#$%^&*()_+~`|}{[]:;?><,./-=",
-  };
+  const enabledSets = (
+    [
+      [options.uppercase, charSets.uppercase],
+      [options.lowercase, charSets.lowercase],
+      [options.numbers, charSets.numbers],
+      [options.symbols, charSets.symbols],
+    ] as const
+  )
+    .filter(([enabled]) => enabled)
+    .map(([, chars]) => chars);
 
-  let validChars = "";
-  if (options.uppercase) validChars += charSets.uppercase;
-  if (options.lowercase) validChars += charSets.lowercase;
-  if (options.numbers) validChars += charSets.numbers;
-  if (options.symbols) validChars += charSets.symbols;
+  if (enabledSets.length === 0) return "";
 
-  if (validChars === "") return "";
+  const validChars = enabledSets.join("");
 
-  const guaranteedChars: string[] = [];
-  if (options.uppercase)
-    guaranteedChars.push(
-      charSets.uppercase[Math.floor(Math.random() * charSets.uppercase.length)],
-    );
-  if (options.lowercase)
-    guaranteedChars.push(
-      charSets.lowercase[Math.floor(Math.random() * charSets.lowercase.length)],
-    );
-  if (options.numbers)
-    guaranteedChars.push(
-      charSets.numbers[Math.floor(Math.random() * charSets.numbers.length)],
-    );
-  if (options.symbols)
-    guaranteedChars.push(
-      charSets.symbols[Math.floor(Math.random() * charSets.symbols.length)],
-    );
-
-  const remainingLength = length - guaranteedChars.length;
-  if (remainingLength < 0) {
-    return guaranteedChars.slice(0, length).join("");
+  // One character from every enabled set is guaranteed, then the rest is
+  // drawn from the combined pool and the whole result is shuffled.
+  const password = enabledSets.map(pickChar);
+  while (password.length < length) {
+    password.push(pickChar(validChars));
   }
 
-  const randomChars: string[] = [];
-  for (let i = 0; i < remainingLength; i++) {
-    randomChars.push(validChars[Math.floor(Math.random() * validChars.length)]);
-  }
-
-  const finalPassword = [...guaranteedChars, ...randomChars];
-
-  for (let i = finalPassword.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [finalPassword[i], finalPassword[j]] = [finalPassword[j], finalPassword[i]];
-  }
-
-  return finalPassword.join("");
+  return shuffle(password).slice(0, length).join("");
 };
 
 export interface StrengthResult {
@@ -95,7 +100,8 @@ export const calculateStrength = (password: string): StrengthResult => {
   let entropy = poolSize > 0 ? password.length * Math.log2(poolSize) : 0;
 
   if (/^(.)\1+$/.test(password)) {
-    entropy -= 20;
+    // A single repeated character carries no real entropy, whatever its length.
+    entropy = 0;
   } else if (/^[a-zA-Z]+$/.test(password) || /^[0-9]+$/.test(password)) {
     entropy -= 10;
   }

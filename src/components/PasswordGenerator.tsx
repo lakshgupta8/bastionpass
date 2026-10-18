@@ -39,8 +39,12 @@ export function PasswordGenerator({ onSavePassword }: PasswordGeneratorProps) {
     if (savedPrefs) {
       try {
         const parsed = JSON.parse(savedPrefs);
-        Object.keys(parsed).forEach((key) => {
-          setValue(key as keyof Options, parsed[key]);
+        // Only restore values that match the expected shape; cookies are user-editable.
+        if (Number.isInteger(parsed.length) && parsed.length >= 4 && parsed.length <= 64) {
+          setValue("length", parsed.length);
+        }
+        (["uppercase", "lowercase", "numbers", "symbols"] as const).forEach((key) => {
+          if (typeof parsed[key] === "boolean") setValue(key, parsed[key]);
         });
       } catch (e) {
         console.error("Failed to parse cookies", e);
@@ -67,12 +71,17 @@ export function PasswordGenerator({ onSavePassword }: PasswordGeneratorProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [options.length, options.uppercase, options.lowercase, options.numbers, options.symbols]);
 
+  useEffect(() => {
+    if (!isCopied) return;
+    const timer = setTimeout(() => setIsCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [isCopied]);
+
   const handleCopy = async () => {
     if (!currentPassword) return;
     try {
       await navigator.clipboard.writeText(currentPassword);
       setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
     } catch (err) {
       console.error("Failed to copy", err);
     }
@@ -93,6 +102,7 @@ export function PasswordGenerator({ onSavePassword }: PasswordGeneratorProps) {
               onClick={handleGenerate}
               className="hover:bg-white/10 p-2 rounded-md text-muted-foreground hover:text-white transition-colors"
               title="Regenerate"
+              aria-label="Regenerate password"
             >
               <RefreshCw size={20} />
             </button>
@@ -103,6 +113,7 @@ export function PasswordGenerator({ onSavePassword }: PasswordGeneratorProps) {
                 isCopied ? "bg-green-500/20 text-green-400" : "hover:bg-white/10 text-primary hover:text-primary-foreground"
               )}
               title="Copy"
+              aria-label="Copy password"
             >
               <Copy size={20} />
             </button>
@@ -110,6 +121,7 @@ export function PasswordGenerator({ onSavePassword }: PasswordGeneratorProps) {
               onClick={() => onSavePassword(currentPassword)}
               className="hover:bg-white/10 p-2 rounded-md text-muted-foreground hover:text-white transition-colors"
               title="Save to Vault"
+              aria-label="Save password to vault"
               disabled={!currentPassword}
             >
               <Save size={20} />
@@ -171,6 +183,7 @@ export function PasswordGenerator({ onSavePassword }: PasswordGeneratorProps) {
             type="range"
             min="4"
             max="64"
+            aria-label="Password length"
             {...register("length", { valueAsNumber: true })}
             className="bg-secondary rounded-lg w-full h-2 accent-primary appearance-none cursor-pointer"
           />

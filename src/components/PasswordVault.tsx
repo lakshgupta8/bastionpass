@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Copy, Trash2, KeyRound, Plus, X } from "lucide-react";
 import { cn } from "../lib/utils";
 import { calculateStrength } from "../lib/passwordUtils";
@@ -29,11 +29,16 @@ export function PasswordVault({
   const [newService, setNewService] = useState("");
   const [newPassword, setNewPassword] = useState("");
 
+  useEffect(() => {
+    if (!copiedId) return;
+    const timer = setTimeout(() => setCopiedId(null), 2000);
+    return () => clearTimeout(timer);
+  }, [copiedId]);
+
   const handleCopy = async (id: string, text: string) => {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 2000);
     } catch (err) {
       console.error("Failed to copy", err);
     }
@@ -75,6 +80,7 @@ export function PasswordVault({
             <span className="font-medium text-primary-foreground text-xs">Add External Password</span>
             <button
               type="button"
+              aria-label="Cancel adding password"
               onClick={() => setIsAdding(false)}
               className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
             >
@@ -172,6 +178,7 @@ export function PasswordVault({
                             : "hover:bg-white/10 text-muted-foreground hover:text-white"
                         )}
                         title="Copy Password"
+                        aria-label="Copy password"
                       >
                         <Copy size={16} />
                       </button>
@@ -179,6 +186,7 @@ export function PasswordVault({
                         onClick={() => onDelete(item.id)}
                         className="hover:bg-red-500/20 p-2 rounded-md text-muted-foreground hover:text-red-400 transition-colors cursor-pointer"
                         title="Delete"
+                        aria-label="Delete password"
                       >
                         <Trash2 size={16} />
                       </button>

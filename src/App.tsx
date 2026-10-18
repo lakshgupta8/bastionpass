@@ -2,24 +2,49 @@ import { useState, useEffect } from "react";
 import { PasswordGenerator } from "./components/PasswordGenerator";
 import { PasswordVault, type SavedPassword } from "./components/PasswordVault";
 
+const VAULT_KEY = "bastion-vault";
+
+const isSavedPassword = (value: unknown): value is SavedPassword => {
+    if (typeof value !== "object" || value === null) return false;
+    const entry = value as Record<string, unknown>;
+    return (
+        typeof entry.id === "string" &&
+        typeof entry.service === "string" &&
+        typeof entry.passwordHash === "string" &&
+        typeof entry.passwordPlain === "string" &&
+        typeof entry.createdAt === "number"
+    );
+};
+
+const loadVault = (): SavedPassword[] => {
+    try {
+        const saved = localStorage.getItem(VAULT_KEY);
+        if (!saved) return [];
+        const parsed: unknown = JSON.parse(saved);
+        if (!Array.isArray(parsed)) return [];
+        // Drop malformed entries instead of letting them crash the list render.
+        return parsed.filter(isSavedPassword);
+    } catch (e) {
+        console.error("Failed to load vault", e);
+        return [];
+    }
+};
+
 function App() {
     const [passwords, setPasswords] = useState<SavedPassword[]>([]);
 
     useEffect(() => {
-        const saved = localStorage.getItem("bastion-vault");
-        if (saved) {
-            try {
-                // eslint-disable-next-line react-hooks/set-state-in-effect
-                setPasswords(JSON.parse(saved));
-            } catch (e) {
-                console.error("Failed to load vault", e);
-            }
-        }
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setPasswords(loadVault());
     }, []);
 
     const saveToStorage = (newVault: SavedPassword[]) => {
         setPasswords(newVault);
-        localStorage.setItem("bastion-vault", JSON.stringify(newVault));
+        try {
+            localStorage.setItem(VAULT_KEY, JSON.stringify(newVault));
+        } catch (e) {
+            console.error("Failed to save vault", e);
+        }
     };
 
     const handleSavePassword = (passwordPlain: string) => {
